@@ -179,3 +179,166 @@ resource "aws_iam_role_policy_attachment" "dev-resources-ssm-policy" {
   role       = aws_iam_role.dev_resources_iam_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
+
+data "aws_ssm_parameter" "username" {
+  name = var.username_parameter_name
+}
+
+data "aws_ssm_parameter" "password" {
+  name = var.password_parameter_name
+}
+
+resource "aws_rds_cluster" "database" {
+  cluster_identifier = "example"
+  engine             = "aurora-postgresql"
+  engine_mode        = "provisioned"
+  engine_version     = "13.6"
+  database_name      = "test"
+  master_username    = data.aws_ssm_parameter.username
+  master_password    = data.aws_ssm_parameter.password
+
+  serverlessv2_scaling_configuration {
+    max_capacity = 1.0
+    min_capacity = 0.5
+  }
+}
+
+resource "aws_rds_cluster_instance" "db_instance" {
+  cluster_identifier = aws_rds_cluster.database.id
+  instance_class     = "db.serverless"
+  engine             = aws_rds_cluster.database.engine
+  engine_version     = aws_rds_cluster.database.engine_version
+}
+
+# Create an ECR repository
+resource "aws_ecr_repository" "my_ecr_repo" {
+  name = "my-ecr-repo"
+}
+
+# Create an EKS cluster with Fargate profile
+module "eks" {
+  source             = "terraform-aws-modules/eks/aws"
+  cluster_name       = "my-eks-cluster"
+  subnets            = [aws_subnet.application_private_subnet.id]
+  vpc_id             = aws_vpc.application_vpc.id
+  worker_groups_launch_template = {
+    instance_type   = "fargate"
+    asg_desired_capacity = 1
+  }
+}
+
+# Create a security group for the ALB
+resource "aws_security_group" "my_alb_sg" {
+  vpc_id = aws_vpc.application_vpc.id
+  // Add any necessary security group rules
+}
+
+# Create an ALB
+resource "aws_lb" "my_alb" {
+  name               = "my-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.my_alb_sg.id]
+  subnets            = [aws_subnet.application_private_subnet.id]
+}
+
+# Create a target group for Fargate tasks
+resource "aws_lb_target_group" "my_target_group" {
+  name     = "my-target-group"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.application_vpc.id
+}
+
+# Create a listener for the ALB
+resource "aws_lb_listener" "my_listener" {
+  load_balancer_arn = aws_lb.my_alb.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "fixed-response"
+    fixed_response {
+      content_type = "text/plain"
+      status_code  = "200"
+      message_body = "OK"
+    }
+  }
+}
+
+# Create a Fargate service
+resource "aws_ecs_service" "my_fargate_service" {
+  name            = "my-fargate-service"
+  cluster         = module.eks.cluster_id
+  task_definition = "<TASK_DEFINITION_ARN>" # Replace with your actual task definition ARN
+
+  desired_count = 1
+
+  network_configuration {
+    subnets = [aws_subnet.application_private_subnet.id]
+
+    security_groups = [
+      aws_security_group.my_alb_sg.id,
+      module.eks.default_security_group_id,
+    ]
+  }
+
+  depends_on = [aws_ecs_task_definition.my_task_definition]
+}
+
+# Create an IAM role for the Fargate tasks to access ECR
+resource "aws_iam_role" "my_fargate_task_role" {
+  name = "my-fargate-task-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# Attach a policy that allows access to ECR
+resource "aws_iam_policy_attachment" "my_ecr_access_attachment" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+  roles      = [aws_iam_role.my_fargate_task_role.name]
+}
+
+# Create a task definition for Fargate
+resource "aws_ecs_task_definition" "my_task_definition" {
+  family                   = "my-task-family"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "256"
+  memory                   = "512"
+
+  execution_role_arn = aws_iam_role.my_fargate_task_role.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "my-container"
+      image     = "${aws_account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/my-ecr-repo:latest" # Replace with your actual ECR repository URI
+      cpu       = 256
+      memory    = 512
+      essential = true
+      portMappings = [
+        {
+          containerPort = 80
+          hostPort      = 80
+          protocol      = "tcp"
+        }
+      ]
+    }
+  ])
+}
+
+# Output the ALB DNS name
+output "alb_dns_name" {
+  value = aws_lb.my_alb.dns_name
+}
