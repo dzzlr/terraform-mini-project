@@ -127,26 +127,19 @@ resource "aws_security_group" "vpc_a_sg_public" {
   description = "VPC-A-SG-Public"
   vpc_id = aws_vpc.vpc_a.id
 
-	egress {
-		from_port = 0
-		to_port = 0
-		protocol = -1
-		cidr_blocks = ["0.0.0.0/0"]
-	}
+  egress {
+    from_port = 0
+    to_port = 0
+    protocol = -1
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
-	ingress {
-		from_port = 22
-		to_port = 22
-		protocol = "tcp"
-		cidr_blocks = ["0.0.0.0/0"]
-	}
-
-	# ingress {
-	# 	from_port = 80
-	# 	to_port = 80
-	# 	protocol = "tcp"
-	# 	cidr_blocks = ["0.0.0.0/0"]
-	# }
+  ingress {
+    from_port = 22
+    to_port = 22
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   tags = {
     Name = "VPC-A-SG-Public"
@@ -171,11 +164,17 @@ resource "aws_security_group" "vpc_a_sg_private" {
   vpc_id = aws_vpc.vpc_a.id
 
   ingress {
-    description = "Allow inbound traffic from Public Subnet"
-    from_port   = 0
-    to_port     = 65535
-    protocol    = "tcp"
+    from_port = 22
+    to_port = 22
+    protocol = "tcp"
     cidr_blocks = ["10.100.0.0/24"]
+  }
+
+  ingress {
+    from_port = -1
+    to_port = -1
+    protocol = "icmp"
+    cidr_blocks = ["10.200.1.0/24"]
   }
 
   tags = {
@@ -201,10 +200,16 @@ resource "aws_security_group" "vpc_b_sg_private" {
   vpc_id = aws_vpc.vpc_b.id
 
   ingress {
-    description = "Allow inbound traffic from Private Subnet"
-    from_port   = 0
-    to_port     = 65535
-    protocol    = "tcp"
+    from_port = 22
+    to_port = 22
+    protocol = "tcp"
+    cidr_blocks = ["10.100.1.0/24"]
+  }
+
+  ingress {
+    from_port = -1
+    to_port = -1
+    protocol = "icmp"
     cidr_blocks = ["10.100.1.0/24"]
   }
 
@@ -218,11 +223,6 @@ resource "aws_vpc_peering_connection" "vpc_peering" {
   peer_vpc_id = aws_vpc.vpc_b.id
   auto_accept = true
 }
-
-# resource "aws_key_pair" "demo_app_key_pair" {
-# 	key_name = "demo-app"
-# 	public_key = file("demo-app.pub")
-# }
 
 output "instance_a_public_ip_addr" {
   value = aws_instance.vpc_a_ec2_public.public_ip
