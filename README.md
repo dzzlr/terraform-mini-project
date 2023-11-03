@@ -1,1 +1,1 @@
-# terraform-technical-test
+# Terraform Course
