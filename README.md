@@ -18,7 +18,7 @@ Before running these Terraform scripts, ensure that you have:
 
 ## Usage
 1. Clone this repository to your local machine.
-2. Run `aws configure` to 
+2. Run `aws configure` to confirm your identity and retrieve associated permissions policies in AWS.
 3. Run `terraform init` to initialize the working directory.
 4. Run `terraform plan` to see the execution plan.
 5. Run `terraform apply` to apply the changes and provision the infrastructure.
