@@ -1,8 +1,11 @@
 # Terraform Mini-Project
 
 ## Overview
-
 This repository contains Terraform scripts for a mini-project aimed at provisioning infrastructure on a cloud platform AWS. It's designed to create, manage, and update the cloud infrastructure using Terraform's declarative configuration files.
+
+## Case Study
+Our product requirement wants to have an architecture that divides the workload environment between Development and Testing.
+In the Development environment there are 2 EC2 instances (1 located in the public subnet and the other in the private subnet). Meanwhile, in the Testing environment, there is only 1 EC2 instance in the private subnet.
 
 ## Contents
 The project consists of the following elements:
